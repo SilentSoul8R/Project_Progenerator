@@ -26,6 +26,7 @@ st.markdown("""
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
         color: #f8fafc;
     }
+    
     .header-title {
         font-family: 'Inter', sans-serif;
         font-weight: 800;
@@ -35,11 +36,13 @@ st.markdown("""
         font-size: 3rem !important;
         margin-bottom: 0.2rem;
     }
+    
     .header-subtitle {
         color: #94a3b8;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
+
     .stButton>button {
         background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
         color: white;
@@ -51,11 +54,13 @@ st.markdown("""
         width: 100%;
         box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
     }
+    
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
         background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
     }
+
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 </style>
