@@ -1,5 +1,6 @@
 import os
 import io
+import urllib.parse
 import requests
 import streamlit as st
 from PIL import Image
@@ -18,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Blocked NSFW/Safety terms for initial client-side filtering
+# Blocked NSFW/Safety terms for client-side filtering
 BLOCKED_KEYWORDS = [
     "nsfw", "nude", "nudity", "naked", "porn", "xxx", "explicit", 
     "gore", "blood", "decapitation", "sex", "erotic"
@@ -122,7 +123,7 @@ with st.sidebar:
 dim_str = aspect_ratio.split(" ")[0]
 width, height = map(int, dim_str.split("x"))
 
-# Initialize Groq Client
+# Initialize Groq Client safely
 client = None
 if groq_api_key:
     try:
@@ -164,10 +165,9 @@ def enhance_and_sanitize_prompt(user_prompt: str) -> str:
 
 
 def generate_image(prompt: str, w: int, h: int, seed_val: int):
-    """Fetches image with safety parameters appended to request."""
-    formatted_prompt = requests.utils.quote(prompt)
-    # safe=true requests server-side content safety enforcement
-    url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width={w}&height={h}&seed={seed_val}&nologo=true&safe=true&model=flux"
+    """Fetches image safely from image generation endpoint."""
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={w}&height={h}&seed={seed_val}&nologo=true&safe=true&model=flux"
     
     response = requests.get(url, timeout=45)
     if response.status_code == 200:
@@ -231,7 +231,7 @@ if generate_btn:
                 img = generate_image(final_prompt, width, height, seed)
                 
                 with col2:
-                    image_placeholder.image(img, use_column_width=True, caption=user_prompt)
+                    image_placeholder.image(img, use_container_width=True, caption=user_prompt)
                     
                     buf = io.BytesIO()
                     img.save(buf, format="PNG")
