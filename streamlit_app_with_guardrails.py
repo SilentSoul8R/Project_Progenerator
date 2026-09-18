@@ -13,57 +13,44 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 st.set_page_config(
-    page_title="VisionCraft AI | Safe Image Generator",
+    page_title="Pro-Generator AI | Image Generator",
     page_icon="🎨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Blocked NSFW/Safety terms for client-side filtering
-BLOCKED_KEYWORDS = [
-    "nsfw", "nude", "nudity", "naked", "porn", "xxx", "explicit", 
-    "gore", "blood", "decapitation", "sex", "erotic"
-]
-
-# -----------------------------------------------------------------------------
 # Custom Styling (CSS)
-# -----------------------------------------------------------------------------
 st.markdown("""
 <style>
-    /* Main Background & Text Styling */
-    .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+    .main {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
         color: #f8fafc;
     }
     
-    /* Header Container */
     .header-title {
-        font-family: 'Inter', system-ui, sans-serif;
+        font-family: 'Inter', sans-serif;
         font-weight: 800;
         background: linear-gradient(90deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-size: 3.2rem !important;
+        font-size: 3rem !important;
         margin-bottom: 0.2rem;
-        letter-spacing: -1px;
     }
     
     .header-subtitle {
         color: #94a3b8;
-        font-size: 1.15rem;
+        font-size: 1.1rem;
         margin-bottom: 2rem;
     }
 
-    /* Primary Interactive Buttons */
     .stButton>button {
         background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
         color: white;
         border: none;
-        padding: 0.75rem 1.5rem;
+        padding: 0.6rem 1.5rem;
         border-radius: 12px;
         font-weight: 600;
-        font-size: 1rem;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s ease;
         width: 100%;
         box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
     }
@@ -72,24 +59,33 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
         background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
-        color: white;
     }
 
-    /* Hide Streamlit Native Footers */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# API Key Management (Security Focus)
+# Guardrails & Safety Settings
 # -----------------------------------------------------------------------------
-groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", None)
+RESTRICTED_KEYWORDS = [
+    "nsfw", "nude", "nudity", "naked", "porn", "explicit", "gore", 
+    "blood", "erotic", "sex", "breast", "genitals"
+]
 
-# Sidebar - Settings & Security Options
+def check_content_safety(prompt: str) -> bool:
+    """Checks input prompt against forbidden keywords."""
+    prompt_lower = prompt.lower()
+    return not any(keyword in prompt_lower for keyword in RESTRICTED_KEYWORDS)
+
+# -----------------------------------------------------------------------------
+# API Key Management
+# -----------------------------------------------------------------------------
+groq_api_key = os.getenv("GROQ_API_KEY")
+
 with st.sidebar:
-    st.image("https://img.icons8.com/isometric/100/paint-palette.png", width=64)
-    st.title("Settings & Security")
+    st.title("Pro-Generator AI")
     st.markdown("---")
     
     if not groq_api_key:
@@ -97,13 +93,13 @@ with st.sidebar:
         groq_api_key = st.text_input(
             "Enter Groq API Key:",
             type="password",
-            help="Your API key stays securely in session memory and is never stored on a server."
+            help="Your API key is used strictly in session memory and is never saved."
         )
     else:
         st.success("🔒 Groq API Key loaded securely.")
         
     st.markdown("---")
-    st.subheader("Rendering Parameters")
+    st.subheader("Generation Settings")
     
     aspect_ratio = st.selectbox(
         "Aspect Ratio",
@@ -112,40 +108,37 @@ with st.sidebar:
     )
     
     enhance_prompt = st.toggle(
-        "Magic Enhance & Moderation (Groq)",
+        "Magic Enhance (Groq LLM)",
         value=True,
-        help="Uses Groq Llama 3 to sanitize unsafe prompts and expand them into high-quality visual art prompts."
+        help="Use Groq to refine and enrich your text into a artistic prompt."
     )
     
-    seed = st.number_input("Seed (For reproducibility)", min_value=0, max_value=999999, value=42)
+    seed = st.number_input("Seed (Optional)", min_value=0, max_value=999999, value=42)
 
-# Extract dimensions
-dim_str = aspect_ratio.split(" ")[0]
-width, height = map(int, dim_str.split("x"))
+dimensions = aspect_ratio.split(" ")[0].split("x")
+width, height = int(dimensions[0]), int(dimensions[1])
 
-# Initialize Groq Client safely
 client = None
 if groq_api_key:
     try:
         client = Groq(api_key=groq_api_key)
     except Exception as e:
-        st.sidebar.error(f"Initialization error: {e}")
+        st.sidebar.error(f"Failed to initialize Groq client: {e}")
 
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
-def enhance_and_sanitize_prompt(user_prompt: str) -> str:
-    """Uses Groq to sanitize unsafe prompts and enhance artistic detail."""
+def enhance_prompt_with_groq(user_prompt: str) -> str:
+    """Refines prompt using Groq and enforces strict safety guidelines."""
     if not client:
         return user_prompt
     
     system_instruction = (
-        "You are an expert AI safety and prompt engineering assistant. "
-        "Expand the user prompt into a vivid, descriptive artistic image prompt. "
-        "SAFETY MANDATE: If the user prompt contains requests for NSFW, explicit content, nudity, "
-        "excessive violence, or illegal material, you MUST sanitize and convert it into a safe, "
-        "family-friendly, PG-rated visual concept. "
-        "Return ONLY the refined safe prompt text, with no explanations or preamble."
+        "You are an expert, safety-conscious AI image prompt engineer. "
+        "Expand the user input into a rich, photorealistic, descriptive image prompt with lighting and art direction details. "
+        "CRITICAL SAFETY RULE: If the prompt contains explicit, nude, violent, or illegal elements, "
+        "completely sanitize and rephrase it into a safe, artistic, family-friendly prompt. "
+        "Return ONLY the refined safe prompt text."
     )
     
     try:
@@ -156,77 +149,86 @@ def enhance_and_sanitize_prompt(user_prompt: str) -> str:
             ],
             model="llama-3.1-8b-instant",
             temperature=0.6,
-            max_tokens=250,
+            max_tokens=200,
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.warning(f"Could not perform Groq safety check/enhancement: {e}")
+        st.warning(f"Could not reach Groq LLM: {e}")
         return user_prompt
 
 
 def generate_image(prompt: str, w: int, h: int, seed_val: int):
-    """Fetches image safely from image generation endpoint."""
+    """Requests image generation with automatic fallback routes on 500 errors."""
     encoded_prompt = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={w}&height={h}&seed={seed_val}&nologo=true&safe=true&model=flux"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
-    response = requests.get(url, timeout=45)
-    if response.status_code == 200:
-        return Image.open(io.BytesIO(response.content))
-    else:
-        raise Exception(f"Image server responded with status code {response.status_code}")
+    # Primary URL (Flux Endpoint)
+    primary_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={w}&height={h}&seed={seed_val}&nologo=true&model=flux"
+    
+    # Fallback URL (Standard Endpoint)
+    fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={w}&height={h}&seed={seed_val}&nologo=true"
+    
+    try:
+        response = requests.get(primary_url, headers=headers, timeout=25)
+        if response.status_code == 200:
+            return Image.open(io.BytesIO(response.content))
+        else:
+            # Try Fallback route on status error
+            fallback_resp = requests.get(fallback_url, headers=headers, timeout=25)
+            if fallback_resp.status_code == 200:
+                return Image.open(io.BytesIO(fallback_resp.content))
+            else:
+                raise Exception(f"Image server responded with status code {response.status_code}")
+    except Exception as e:
+        raise Exception(f"{e}")
 
 # -----------------------------------------------------------------------------
 # Main Application UI
 # -----------------------------------------------------------------------------
-st.markdown('<div class="header-title">VisionCraft AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="header-subtitle">Turn your imagination into breathtaking visual art using Groq & Flux with safety guardrails.</div>', unsafe_allow_html=True)
+st.markdown('<div class="header-title">Pro-Generator AI</div>', unsafe_allow_html=True)
+st.markdown('<div class="header-subtitle">High-performance AI visual creation suite powered by Groq & Flux.</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
-    st.markdown("### 1. Enter Your Idea")
+    st.subheader("1. Enter Your Visual Description")
     user_prompt = st.text_area(
         "Prompt Input",
-        placeholder="e.g., A futuristic cyberpunk owl perched on a neon glowing tree...",
-        height=160,
+        placeholder="e.g., A white-haired elf girl with royal garments sitting on a crystalline throne, cinematic lighting...",
+        height=140,
         label_visibility="collapsed"
     )
     
     generate_btn = st.button("✨ Generate Artwork")
 
 with col2:
-    st.markdown("### 2. Live Canvas")
+    st.subheader("2. Visual Canvas")
     image_placeholder = st.empty()
-    image_placeholder.info("👈 Enter a prompt and click **Generate Artwork** to produce an image.")
+    image_placeholder.info("👈 Enter a prompt and click Generate to create artwork.")
 
 # -----------------------------------------------------------------------------
 # Execution Workflow
 # -----------------------------------------------------------------------------
 if generate_btn:
-    prompt_lower = user_prompt.lower()
-    
-    # Layer 1 Guardrail: Client-Side Keyword Filter
-    if any(keyword in prompt_lower for keyword in BLOCKED_KEYWORDS):
-        st.error("⚠️ Prompt rejected: Contains blocked keywords or explicit content request. Please keep prompts family-friendly.")
-    elif not user_prompt.strip():
-        st.error("Please enter a text prompt first.")
+    if not user_prompt.strip():
+        st.error("Please enter a prompt before generating.")
+    elif not check_content_safety(user_prompt):
+        st.error("⚠️ Prompt contains restricted keywords. Please modify your description.")
     else:
         final_prompt = user_prompt
         
-        # Layer 2 Guardrail: Groq System Prompt Moderation & Expansion
         if enhance_prompt:
             if not groq_api_key:
-                st.error("Groq API key is missing. Add it to `.env` or the sidebar to enable safety moderation.")
+                st.error("Groq API Key is missing. Please add it to your `.env` file or sidebar.")
                 st.stop()
-            
-            with st.status("🛡️ Safety moderation & prompt enhancement in progress...", expanded=False) as status:
-                final_prompt = enhance_and_sanitize_prompt(user_prompt)
-                status.update(label="✨ Prompt Sanitized & Enhanced!", state="complete")
+                
+            with st.status("🧠 Optimizing prompt with Groq...", expanded=False) as status:
+                final_prompt = enhance_prompt_with_groq(user_prompt)
+                status.update(label="✨ Prompt optimized successfully!", state="complete")
             
             st.caption(f"**Sanitized Visual Prompt:** _{final_prompt}_")
 
-        # Layer 3 Guardrail: Server API Safe Flag
-        with st.spinner("🎨 Rendering high-resolution artwork..."):
+        with st.spinner("🎨 Rendering image..."):
             try:
                 img = generate_image(final_prompt, width, height, seed)
                 
@@ -238,12 +240,12 @@ if generate_btn:
                     byte_im = buf.getvalue()
                     
                     st.download_button(
-                        label="📥 Download High-Res Image (PNG)",
+                        label="📥 Download High-Res PNG",
                         data=byte_im,
-                        file_name="visioncraft_artwork.png",
+                        file_name="pro_generator_artwork.png",
                         mime="image/png",
                     )
-                st.toast("Artwork created successfully!", icon="🎨")
+                st.toast("Image generated successfully!", icon="🎉")
                 
             except Exception as err:
                 st.error(f"Generation error: {err}")
